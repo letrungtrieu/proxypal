@@ -49,6 +49,22 @@ function createAppStore() {
   const [isLoading, setIsLoading] = createSignal(false);
   const [isInitialized, setIsInitialized] = createSignal(false);
 
+  // Proxy uptime tracking
+  const [proxyStartTime, setProxyStartTime] = createSignal<number | null>(null);
+
+  // Helper to update proxy status and track uptime
+  const updateProxyStatus = (status: ProxyStatus) => {
+    const wasRunning = proxyStatus().running;
+    setProxyStatus(status);
+
+    // Track start time when proxy starts
+    if (status.running && !wasRunning) {
+      setProxyStartTime(Date.now());
+    } else if (!status.running && wasRunning) {
+      setProxyStartTime(null);
+    }
+  };
+
   // Initialize from backend
   const initialize = async () => {
     try {
@@ -60,7 +76,7 @@ function createAppStore() {
         getConfig(),
       ]);
 
-      setProxyStatus(proxyState);
+      updateProxyStatus(proxyState);
       setConfig(configState);
 
       // Refresh auth status from CLIProxyAPI's auth directory
@@ -94,7 +110,7 @@ function createAppStore() {
 
       // Setup event listeners
       const unlistenProxy = await onProxyStatusChanged((status) => {
-        setProxyStatus(status);
+        updateProxyStatus(status);
       });
 
       const unlistenAuth = await onAuthStatusChanged((status) => {
@@ -119,10 +135,10 @@ function createAppStore() {
         try {
           if (shouldStart) {
             const status = await startProxy();
-            setProxyStatus(status);
+            updateProxyStatus(status);
           } else {
             const status = await stopProxy();
-            setProxyStatus(status);
+            updateProxyStatus(status);
           }
         } catch (error) {
           console.error("Failed to toggle proxy:", error);
@@ -133,7 +149,7 @@ function createAppStore() {
       if (configState.autoStart) {
         try {
           const status = await startProxy();
-          setProxyStatus(status);
+          updateProxyStatus(status);
         } catch (error) {
           console.error("Failed to auto-start proxy:", error);
         }
@@ -158,7 +174,8 @@ function createAppStore() {
   return {
     // Proxy
     proxyStatus,
-    setProxyStatus,
+    setProxyStatus: updateProxyStatus,
+    proxyStartTime,
 
     // Auth
     authStatus,

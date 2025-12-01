@@ -3,6 +3,7 @@ import { Button } from "../components/ui";
 import { StatusIndicator } from "../components/StatusIndicator";
 import { ApiEndpoint } from "../components/ApiEndpoint";
 import { SetupModal } from "../components/SetupModal";
+import { UsageSummary } from "../components/UsageSummary";
 import { appStore } from "../stores/app";
 import { toastStore } from "../stores/toast";
 import {
@@ -199,7 +200,10 @@ export function DashboardPage() {
 
       {/* Main content */}
       <main class="flex-1 p-6 overflow-y-auto">
-        <div class="max-w-3xl mx-auto space-y-6">
+        <div class="max-w-3xl mx-auto space-y-6 animate-stagger">
+          {/* Usage Summary */}
+          <UsageSummary />
+
           {/* API Endpoint */}
           <ApiEndpoint
             endpoint={proxyStatus().endpoint}
@@ -212,9 +216,9 @@ export function DashboardPage() {
               <h2 class="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3">
                 Connected Accounts
               </h2>
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-2 gap-3 animate-stagger">
                 {connectedProviders().map((provider) => (
-                  <div class="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 group">
+                  <div class="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 group hover-lift">
                     <img
                       src={provider.logo}
                       alt={provider.name}
@@ -272,10 +276,10 @@ export function DashboardPage() {
                   Start the proxy to connect accounts
                 </p>
               )}
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-2 gap-3 animate-stagger">
                 {disconnectedProviders().map((provider) => (
                   <button
-                    class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-brand-500 hover-lift transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => handleConnect(provider.provider)}
                     disabled={!proxyStatus().running || connecting() !== null}
                   >
@@ -288,8 +292,27 @@ export function DashboardPage() {
                       {provider.name}
                     </span>
                     {connecting() === provider.provider ? (
-                      <span class="ml-auto text-xs text-gray-500">
-                        Connecting...
+                      <span class="ml-auto flex items-center gap-2 text-xs text-gray-500">
+                        <svg
+                          class="w-3 h-3 animate-spin"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                          />
+                          <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        Connecting
                       </span>
                     ) : (
                       <svg
@@ -317,10 +340,10 @@ export function DashboardPage() {
             <h2 class="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-3">
               Quick Setup
             </h2>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-3 gap-3 animate-stagger">
               {setupTools.map((tool) => (
                 <button
-                  class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-brand-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-all text-center group"
+                  class="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-brand-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 hover-lift transition-all text-center group"
                   onClick={() => setSetupTool(tool.id)}
                 >
                   <img
