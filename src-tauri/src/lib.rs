@@ -2873,6 +2873,8 @@ fn which_exists(cmd: &str) -> bool {
         home.join("go/bin"),
         // Bun binaries
         home.join(".bun/bin"),
+        // OpenCode CLI
+        home.join(".opencode/bin"),
     ];
     
     // WSL-specific paths: check Windows side binaries
@@ -2900,6 +2902,42 @@ fn which_exists(cmd: &str) -> bool {
         }
         if let Some(program_files) = std::env::var_os("PROGRAMFILES") {
             paths.push(std::path::PathBuf::from(program_files).join("Git\\cmd"));
+        }
+        
+        // Windows detecting WSL-installed binaries
+        // WSL paths accessible via \\wsl.localhost\<distro>\home\<user> or \\wsl$\<distro>\home\<user>
+        let wsl_distros = ["Ubuntu", "Ubuntu-22.04", "Ubuntu-24.04", "Debian"];
+        let username = home.file_name().unwrap_or_default().to_string_lossy();
+        
+        'wsl_search: for distro in &wsl_distros {
+            // Try both WSL path formats (wsl.localhost is newer, wsl$ is legacy)
+            for prefix in &[r"\\wsl.localhost", r"\\wsl$"] {
+                let wsl_home = std::path::PathBuf::from(
+                    format!(r"{}\{}\home\{}", prefix, distro, username)
+                );
+                if wsl_home.exists() {
+                    // Standard Linux paths in WSL
+                    paths.push(wsl_home.join(".local/bin"));
+                    paths.push(wsl_home.join(".cargo/bin"));
+                    paths.push(wsl_home.join(".bun/bin"));
+                    paths.push(wsl_home.join("go/bin"));
+                    paths.push(wsl_home.join(".opencode/bin"));
+                    
+                    // NVM node versions in WSL
+                    let wsl_nvm = wsl_home.join(".nvm/versions/node");
+                    if wsl_nvm.exists() {
+                        if let Ok(entries) = std::fs::read_dir(&wsl_nvm) {
+                            for entry in entries.flatten() {
+                                let bin_path = entry.path().join("bin");
+                                if bin_path.exists() {
+                                    paths.push(bin_path);
+                                }
+                            }
+                        }
+                    }
+                    break 'wsl_search; // Found valid distro, stop searching
+                }
+            }
         }
     }
     
