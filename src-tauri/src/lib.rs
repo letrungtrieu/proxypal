@@ -3028,6 +3028,10 @@ async fn test_agent_connection(state: State<'_, AppState>, agent_id: String) -> 
 pub struct AvailableModel {
     pub id: String,
     pub owned_by: String,
+    /// Source of the model: "gemini-api", "vertex", "copilot", "api-key", "oauth", etc.
+    /// Used to distinguish between different authentication sources for the same provider
+    #[serde(default)]
+    pub source: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3049,6 +3053,12 @@ async fn get_available_models(state: State<'_, AppState>) -> Result<Vec<Availabl
     if !proxy_running {
         return Ok(vec![]);
     }
+    
+    // Get auth status to determine model sources
+    let auth_status = state.auth_status.lock().unwrap().clone();
+    let has_vertex = auth_status.vertex > 0;
+    let has_gemini_api = !config.gemini_api_keys.is_empty();
+    let has_copilot = config.copilot.enabled;
     
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -3085,9 +3095,45 @@ async fn get_available_models(state: State<'_, AppState>) -> Result<Vec<Availabl
     
     let models: Vec<AvailableModel> = api_response.data
         .into_iter()
-        .map(|m| AvailableModel {
-            id: m.id,
-            owned_by: m.owned_by,
+        .map(|m| {
+            // Determine source based on owned_by and auth status
+            let source = match m.owned_by.as_str() {
+                "google" => {
+                    // Google models can come from Vertex AI or Gemini API
+                    if has_vertex && !has_gemini_api {
+                        "vertex".to_string()
+                    } else if has_gemini_api && !has_vertex {
+                        "gemini-api".to_string()
+                    } else if has_vertex && has_gemini_api {
+                        "vertex+gemini-api".to_string() // Both sources available
+                    } else {
+                        "google".to_string() // Fallback
+                    }
+                },
+                "anthropic" => {
+                    if !config.claude_api_keys.is_empty() {
+                        "api-key".to_string()
+                    } else {
+                        "oauth".to_string()
+                    }
+                },
+                "openai" => {
+                    if has_copilot {
+                        "copilot".to_string()
+                    } else if !config.codex_api_keys.is_empty() {
+                        "api-key".to_string()
+                    } else {
+                        "oauth".to_string()
+                    }
+                },
+                owner => owner.to_string(),
+            };
+            
+            AvailableModel {
+                id: m.id,
+                owned_by: m.owned_by,
+                source,
+            }
         })
         .collect();
     
@@ -3665,7 +3711,7 @@ fn get_model_limits(model_id: &str, owned_by: &str) -> (u64, u64) {
 }
 
 // Get display name for a model
-fn get_model_display_name(model_id: &str, owned_by: &str) -> String {
+fn get_model_display_name(model_id: &str, owned_by: &str, source: &str) -> String {
     // Convert model ID to human-readable name
     let base_name = model_id
         .replace("-", " ")
@@ -3682,13 +3728,21 @@ fn get_model_display_name(model_id: &str, owned_by: &str) -> String {
         .join(" ");
     
     // Add provider prefix for clarity
-    match owned_by {
+    let name = match owned_by {
         "copilot" => format!("Copilot {}", base_name),
         "anthropic" => format!("{}", base_name),
         "google" => format!("{}", base_name),
         "openai" => format!("{}", base_name),
         "qwen" => format!("{}", base_name),
         _ => base_name
+    };
+    
+    // Add source indicator for Vertex AI and other special sources
+    match source {
+        "vertex" => format!("{} [Vertex]", name),
+        "vertex+gemini-api" => format!("{} [Vertex+API]", name),
+        "copilot" => format!("{} [Copilot]", name),
+        _ => name
     }
 }
 
@@ -3811,6 +3865,16 @@ Edit your `~/.claude/settings.json` and replace the model values in the `env` se
 | Opus | `gemini-2.5-pro` |
 | Sonnet | `gemini-2.5-flash` |
 | Haiku | `gemini-2.5-flash-lite` |
+
+### Vertex AI (Google Cloud)
+| Tier | Model ID |
+|------|----------|
+| Opus | `gemini-2.5-pro`, `gemini-3-pro-preview` |
+| Sonnet | `gemini-2.5-flash`, `gemini-3-pro-image-preview` |
+| Haiku | `gemini-2.5-flash-lite` |
+
+> **Note**: Vertex AI uses Google Cloud service account authentication.
+> Import your service account JSON in ProxyPal to use these models.
 
 ### OpenAI GPT-5
 | Tier | Model ID |
@@ -3937,8 +4001,18 @@ export CODE_ASSIST_ENDPOINT="{}"
                     "anthropic" => (endpoint.clone(), "anthropic"),
                     _ => (format!("{}/v1", endpoint), "openai"),
                 };
+                
+                // Add source indicator to model display name for clarity
+                let display_name = match m.source.as_str() {
+                    "vertex" => format!("{} [Vertex]", m.id),
+                    "vertex+gemini-api" => format!("{} [Vertex+API]", m.id),
+                    "copilot" => format!("{} [Copilot]", m.id),
+                    _ => m.id.clone(),
+                };
+                
                 serde_json::json!({
                     "model": m.id,
+                    "model_display_name": display_name,
                     "base_url": base_url,
                     "api_key": "proxypal-local",
                     "provider": provider
@@ -4136,7 +4210,7 @@ export AMP_API_KEY="proxypal-local"
             
             for m in &models {
                 let (context_limit, output_limit) = get_model_limits(&m.id, &m.owned_by);
-                let display_name = get_model_display_name(&m.id, &m.owned_by);
+                let display_name = get_model_display_name(&m.id, &m.owned_by, &m.source);
                 // Enable reasoning display for models with "-thinking" suffix
                 let is_thinking_model = m.id.ends_with("-thinking");
                 // Check if this is a GPT-5.x model (Codex reasoning models)
