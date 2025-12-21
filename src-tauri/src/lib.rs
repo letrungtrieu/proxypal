@@ -5,7 +5,7 @@ mod state;
 mod types;
 mod utils;
 
-use crate::config::{AppConfig, get_auth_path, get_history_path, load_config, save_config_to_file};
+use crate::config::{get_auth_path, get_history_path, load_config, save_config_to_file};
 use crate::state::AppState;
 use crate::types::{
     ProxyStatus, RequestLog, AuthStatus, OAuthState,
@@ -14,7 +14,7 @@ use crate::types::{
     ClaudeApiKey, GeminiApiKey, CodexApiKey, OpenAICompatibleProvider,
     ThinkingBudgetSettings, ReasoningEffortSettings,
     AuthFile, LogEntry, DetectedTool, AgentStatus,
-    AvailableModel, ProviderTestResult,
+    AvailableModel, ProviderTestResult, ProviderHealth, HealthStatus,
 };
 use crate::utils::{estimate_request_cost, detect_provider_from_model, detect_provider_from_path, extract_model_from_path};
 use serde::Deserialize;
@@ -27,7 +27,6 @@ use tauri::{
     Emitter, Manager, State,
 };
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use regex::Regex;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -4083,6 +4082,100 @@ async fn delete_codex_api_key(state: State<'_, AppState>, index: usize) -> Resul
 }
 
 // ============================================
+// Provider Health Check
+// ============================================
+
+#[tauri::command]
+async fn check_provider_health(state: State<'_, AppState>) -> Result<ProviderHealth, String> {
+    let (port, proxy_running) = {
+        let config = state.config.lock().unwrap();
+        let status = state.proxy_status.lock().unwrap();
+        (config.port, status.running)
+    };
+    
+    let auth_status = state.auth_status.lock().unwrap().clone();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    // If proxy is not running, all providers are offline
+    if !proxy_running {
+        let offline_status = HealthStatus {
+            status: "offline".to_string(),
+            latency_ms: None,
+            last_checked: now,
+        };
+        return Ok(ProviderHealth {
+            claude: offline_status.clone(),
+            openai: offline_status.clone(),
+            gemini: offline_status.clone(),
+            qwen: offline_status.clone(),
+            iflow: offline_status.clone(),
+            vertex: offline_status.clone(),
+            antigravity: offline_status,
+        });
+    }
+    
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    
+    // Check health for each provider based on auth status
+    // Note: We use a single /v1/models call since the proxy handles routing
+    // For now, if the proxy is responsive, all configured providers are healthy
+    let models_url = format!("http://127.0.0.1:{}/v1/models", port);
+    let start = std::time::Instant::now();
+    let (proxy_healthy, latency) = match client
+        .get(&models_url)
+        .header("Authorization", "Bearer proxypal-local")
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let latency = start.elapsed().as_millis() as u64;
+            (response.status().is_success(), Some(latency))
+        }
+        Err(_) => (false, None),
+    };
+    
+    // Build health status for each provider
+    let make_status = |is_configured: bool| -> HealthStatus {
+        if !is_configured {
+            HealthStatus {
+                status: "unconfigured".to_string(),
+                latency_ms: None,
+                last_checked: now,
+            }
+        } else if !proxy_healthy {
+            HealthStatus {
+                status: "offline".to_string(),
+                latency_ms: latency,
+                last_checked: now,
+            }
+        } else {
+            let is_degraded = latency.map(|l| l > 2000).unwrap_or(false);
+            HealthStatus {
+                status: if is_degraded { "degraded" } else { "healthy" }.to_string(),
+                latency_ms: latency,
+                last_checked: now,
+            }
+        }
+    };
+    
+    Ok(ProviderHealth {
+        claude: make_status(auth_status.claude > 0),
+        openai: make_status(auth_status.openai > 0),
+        gemini: make_status(auth_status.gemini > 0),
+        qwen: make_status(auth_status.qwen > 0),
+        iflow: make_status(auth_status.iflow > 0),
+        vertex: make_status(auth_status.vertex > 0),
+        antigravity: make_status(auth_status.antigravity > 0),
+    })
+}
+
+// ============================================
 // Thinking Budget Settings
 // ============================================
 
@@ -4388,7 +4481,7 @@ async fn toggle_auth_file(state: State<'_, AppState>, file_id: String, disabled:
 
 // Download auth file - returns path to temp file
 #[tauri::command]
-async fn download_auth_file(state: State<'_, AppState>, file_id: String, filename: String) -> Result<String, String> {
+async fn download_auth_file(state: State<'_, AppState>, _file_id: String, filename: String) -> Result<String, String> {
     let port = state.config.lock().unwrap().port;
     let url = format!("{}?name={}", get_management_url(port, "auth-files/download"), filename);
     
@@ -4993,6 +5086,8 @@ pub fn run() {
             append_to_shell_profile,
             get_usage_stats,
             get_request_history,
+            // Provider Health Check
+            check_provider_health,
             add_request_to_history,
             clear_request_history,
             sync_usage_from_proxy,

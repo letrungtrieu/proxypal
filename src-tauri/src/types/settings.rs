@@ -17,6 +17,7 @@ impl Default for ThinkingBudgetSettings {
 }
 
 impl ThinkingBudgetSettings {
+    #[allow(dead_code)]
     pub fn get_budget_tokens(&self) -> u32 {
         match self.mode.as_str() {
             "low" => 2048,

@@ -27,6 +27,7 @@ pub struct AgentStatus {
 }
 
 // Test agent connection by making a simple API call through the proxy
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentTestResult {
@@ -36,6 +37,7 @@ pub struct AgentTestResult {
 }
 
 // Claude Code settings struct
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeCodeSettings {
