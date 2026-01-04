@@ -1038,6 +1038,15 @@ export async function setMaxRetryInterval(value: number): Promise<void> {
 	return invoke("set_max_retry_interval", { value });
 }
 
+// Log Size - controls how many log entries are retained in memory
+export async function getLogSize(): Promise<number> {
+	return invoke("get_log_size");
+}
+
+export async function setLogSize(size: number): Promise<void> {
+	return invoke("set_log_size", { size });
+}
+
 // WebSocket Auth - toggle WebSocket authentication requirement
 export async function getWebsocketAuth(): Promise<boolean> {
 	return invoke("get_websocket_auth");

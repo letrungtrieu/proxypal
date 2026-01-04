@@ -49,6 +49,7 @@ import {
 	getCloseToTray,
 	getConfigYaml,
 	getForceModelMappings,
+	getLogSize,
 	getMaxRetryInterval,
 	getOAuthExcludedModels,
 	getReasoningEffortSettings,
@@ -66,6 +67,7 @@ import {
 	setCloudflareConnection,
 	setConfigYaml,
 	setForceModelMappings,
+	setLogSize,
 	setMaxRetryInterval,
 	setOAuthExcludedModels,
 	setReasoningEffortSettings,
@@ -244,11 +246,13 @@ export function SettingsPage() {
 
 	// Management API runtime settings
 	const [maxRetryInterval, setMaxRetryIntervalState] = createSignal<number>(0);
+	const [logSize, setLogSizeState] = createSignal<number>(500);
 	const [websocketAuth, setWebsocketAuthState] = createSignal<boolean>(false);
 	const [forceModelMappings, setForceModelMappingsState] =
 		createSignal<boolean>(false);
 	const [savingMaxRetryInterval, setSavingMaxRetryInterval] =
 		createSignal(false);
+	const [savingLogSize, setSavingLogSize] = createSignal(false);
 	const [savingWebsocketAuth, setSavingWebsocketAuth] = createSignal(false);
 	const [savingForceModelMappings, setSavingForceModelMappings] =
 		createSignal(false);
@@ -608,6 +612,13 @@ export function SettingsPage() {
 			}
 
 			try {
+				const size = await getLogSize();
+				setLogSizeState(size);
+			} catch (error) {
+				console.error("Failed to fetch log size:", error);
+			}
+
+			try {
 				const wsAuth = await getWebsocketAuth();
 				setWebsocketAuthState(wsAuth);
 			} catch (error) {
@@ -664,6 +675,20 @@ export function SettingsPage() {
 			toastStore.error("Failed to update max retry interval", String(error));
 		} finally {
 			setSavingMaxRetryInterval(false);
+		}
+	};
+
+	// Handler for log size change
+	const handleLogSizeChange = async (value: number) => {
+		setSavingLogSize(true);
+		try {
+			await setLogSize(value);
+			setLogSizeState(value);
+			toastStore.success("Log buffer size updated");
+		} catch (error) {
+			toastStore.error("Failed to update log size", String(error));
+		} finally {
+			setSavingLogSize(false);
 		}
 	};
 
@@ -1653,6 +1678,51 @@ export function SettingsPage() {
 									<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
 										Maximum wait time between retries in seconds (0 = no limit).
 										Updates live without restart.
+									</p>
+								</label>
+
+								<label class="block">
+									<span class="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+										Log Buffer Size
+										<Show when={savingLogSize()}>
+											<svg
+												class="w-4 h-4 animate-spin text-brand-500"
+												fill="none"
+												viewBox="0 0 24 24"
+											>
+												<circle
+													class="opacity-25"
+													cx="12"
+													cy="12"
+													r="10"
+													stroke="currentColor"
+													stroke-width="4"
+												/>
+												<path
+													class="opacity-75"
+													fill="currentColor"
+													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+												/>
+											</svg>
+										</Show>
+									</span>
+									<input
+										type="number"
+										value={logSize()}
+										onInput={(e) => {
+											const val = Math.max(
+												100,
+												parseInt(e.currentTarget.value) || 500,
+											);
+											handleLogSizeChange(val);
+										}}
+										disabled={savingLogSize()}
+										class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-smooth disabled:opacity-50"
+										min="100"
+									/>
+									<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+										Number of log entries to retain in memory. Higher values use
+										more memory but preserve older logs.
 									</p>
 								</label>
 							</Show>

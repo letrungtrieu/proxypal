@@ -6311,6 +6311,52 @@ async fn set_max_retry_interval(state: State<'_, AppState>, value: i32) -> Resul
     Ok(())
 }
 
+// Get log size from Management API
+#[tauri::command]
+async fn get_log_size(state: State<'_, AppState>) -> Result<u32, String> {
+    let port = state.config.lock().unwrap().port;
+    let url = get_management_url(port, "log-size");
+    
+    let client = build_management_client();
+    let response = client
+        .get(&url)
+        .header("X-Management-Key", &get_management_key())
+        .send()
+        .await
+        .map_err(|e| format!("Failed to get log size: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Ok(500); // Default to 500 if not set
+    }
+    
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    Ok(json["log-size"].as_u64().unwrap_or(500) as u32)
+}
+
+// Set log size via Management API
+#[tauri::command]
+async fn set_log_size(state: State<'_, AppState>, size: u32) -> Result<(), String> {
+    let port = state.config.lock().unwrap().port;
+    let url = get_management_url(port, "log-size");
+    
+    let client = build_management_client();
+    let response = client
+        .put(&url)
+        .header("X-Management-Key", &get_management_key())
+        .json(&serde_json::json!({ "value": size }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to set log size: {}", e))?;
+    
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("Failed to set log size: {} - {}", status, text));
+    }
+    
+    Ok(())
+}
+
 // Get WebSocket auth status from Management API
 #[tauri::command]
 async fn get_websocket_auth(state: State<'_, AppState>) -> Result<bool, String> {
@@ -6908,6 +6954,8 @@ pub fn run() {
             // Management API Settings
             get_max_retry_interval,
             set_max_retry_interval,
+            get_log_size,
+            set_log_size,
             get_websocket_auth,
             set_websocket_auth,
             get_force_model_mappings,
