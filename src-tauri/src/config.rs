@@ -137,7 +137,7 @@ impl Default for AppConfig {
             amp_routing_mode: "mappings".to_string(),
             routing_strategy: "round-robin".to_string(),
             copilot: CopilotConfig::default(),
-            force_model_mappings: false,
+            force_model_mappings: true,
             claude_api_keys: Vec::new(),
             gemini_api_keys: Vec::new(),
             codex_api_keys: Vec::new(),

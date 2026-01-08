@@ -5002,10 +5002,24 @@ export AMP_API_KEY="proxypal-local"
                     output_limit 
                 };
                 
+                // Determine modalities based on model capabilities
+                // Multimodal models support text + image + pdf input
+                // gemini-claude-* models are ProxyPal's Gemini-powered Claude-compatible models
+                let is_multimodal = m.id.starts_with("gemini-claude-");
+                
                 let mut model_config = serde_json::json!({
                     "name": display_name,
                     "limit": { "context": context_limit, "output": effective_output_limit }
                 });
+                
+                // Add modalities for multimodal models
+                if is_multimodal {
+                    model_config["modalities"] = serde_json::json!({
+                        "input": ["text", "image", "pdf"],
+                        "output": ["text"]
+                    });
+                }
+                
                 if is_thinking_model {
                     // Enable extended thinking
                     model_config["reasoning"] = serde_json::json!(true);

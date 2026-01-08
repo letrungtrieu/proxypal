@@ -2314,9 +2314,8 @@ export function SettingsPage() {
 												</Show>
 											</div>
 											<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-												Model mappings take precedence over local API keys.
-												Enable to route mapped models via OAuth instead of local
-												keys.
+												Force apply mappings. Required for custom models that
+												are not natively recognized by the proxy.
 											</p>
 										</div>
 										<button
