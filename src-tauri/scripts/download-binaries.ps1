@@ -51,7 +51,7 @@ try {
 
     Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
 
-    $SourceExe = Join-Path $TempDir "CLIProxyAPI.exe"
+    $SourceExe = Join-Path $TempDir "cli-proxy-api.exe"
     $DestPath = Join-Path $BinariesDir $BinaryName
 
     if (Test-Path $SourceExe) {
